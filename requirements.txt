@@ -4,3 +4,5 @@ Pillow
 pdf2image
 pydantic
 pydantic-settings
+google-genai
+ollama
