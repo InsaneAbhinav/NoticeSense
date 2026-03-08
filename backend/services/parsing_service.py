@@ -89,17 +89,27 @@ def extract_regulatory_legal_data(cleaned_text: str, doc_type: str) -> dict:
     elif ref_match:
         data["reference_number"] = ref_match.group(1).strip().split('\n')[0][:100]
         
-    # Date
-    date_match = re.search(r'(?:Date|Dated)\s*[:-]\s*([\d\w\-/\.]+)', cleaned_text, re.IGNORECASE)
+    # Date — capture full rest-of-line after "Date:" or "Dated:" (handles spaces in dates)
+    date_match = re.search(r'(?:Date|Dated)\s*[:-]\s*([^\n]{4,40})', cleaned_text, re.IGNORECASE)
     if not date_match:
-         date_match = re.search(r'\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}\b', cleaned_text, re.IGNORECASE)
+        # Full written date: "March 15, 2026" / "15 March 2026"
+        date_match = re.search(
+            r'\b((?:\d{1,2}(?:st|nd|rd|th)?\s+)?(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4})\b',
+            cleaned_text, re.IGNORECASE)
     if not date_match:
-        date_match = re.search(r'\b(\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4})\b', cleaned_text)
+        # Numeric: 15/03/2026 or 15-03-2026 or 15.03.2026
+        date_match = re.search(r'\b(\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4})\b', cleaned_text)
     if date_match:
         try:
-            data["date"] = date_match.group(1).strip()
+            raw_date = date_match.group(1).strip()
+            # Strip ordinal suffixes (1st, 2nd, 3rd, 15th → 15)
+            raw_date = re.sub(r'(\d+)(st|nd|rd|th)\b', r'\1', raw_date, flags=re.IGNORECASE)
+            # Trim any trailing junk after the year
+            raw_date = re.sub(r'(\d{4}).*', r'\1', raw_date).strip()
+            data["date"] = raw_date
         except IndexError:
             data["date"] = date_match.group(0).strip()
+
             
     # Subject
     salutation_match = re.search(r'(?:Madam\s*/\s*Sir|Dear\s+Sir|Dear\s+Madam|Sir\s*/\s*Madam|Sir,|Madam,)\s*\n+(.+?)(?=\n\n|\n[A-Z0-9])', cleaned_text, re.IGNORECASE | re.DOTALL)
