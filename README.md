@@ -1,45 +1,58 @@
-# NoticeSense - Phase 1 (MVP)
+# NoticeSense
 
-NoticeSense is an Agentic AI System for Understanding Official Notices. This repository contains **Phase 1 (MVP)**, which focuses on a working OCR-based notice text extraction system.
+NoticeSense is an Agentic AI System designed for understanding and tracking official notices and circulars. It utilizes OCR to extract text from documents (PDF, JPG, PNG) and leverages a multi-agent AI pipeline to parse intents, extract deadlines, summarize actionable steps, and allow you to chat interactively with the notice context.
+
+Phase 3 introduces a robust decoupled architecture: a **FastAPI backend** handling inference, and a clean **vanilla HTML/CSS/JS Single-Page Application (SPA)** frontend.
 
 ## Features
-- **Upload Notices**: Accepts `.pdf`, `.png`, `.jpg`, and `.jpeg` formats.
-- **OCR Text Extraction**: Uses Tesseract OCR to accurately extract text from documents.
-- **PDF Conversion**: Uses `pdf2image` and Poppler to convert multi-page PDF notices to processable images.
-- **Frontend UI**: A clean, modular Streamlit frontend for interacting with the OCR pipeline.
+- **Upload Any Notice**: Supports `.pdf`, `.png`, `.jpg`, and `.jpeg`. Multi-page PDFs are automatically converted.
+- **OCR Text Extraction**: Powered by Tesseract OCR with built-in noise-filtering.
+- **3-Agent AI Pipeline**:
+  - **Intent Agent**: Categorizes the notice (e.g., Compliance, Legal, General) and writes a concise summary.
+  - **Deadline Agent**: Scans for exact dates/deadlines and calculates "Days Remaining."
+  - **Action Agent**: Extracts a bulleted list of precise steps you need to take.
+- **Interactive Chat**: Ask the AI questions about the uploaded notice. It will strictly answer based only on the document.
+- **Flexible LLM Backend**: Choose your AI engine. Run entirely locally using **Ollama** (e.g., Gemma 3, Llama 3) for absolute privacy, or use **Google Gemini** for high-speed cloud inference.
 
 ## Folder Structure
 ```text
 NoticeSense/
 ├── backend/                  # Core backend logic
-│   ├── core/
-│   │   └── config.py         # Application settings & environment configurations
-│   ├── services/
-│   │   └── ocr_service.py    # Tesseract OCR extraction logic (PDF/Image)
-│   └── utils/
-│       └── file_utils.py     # File saving and upload directory cleanup utilities
+│   ├── api/                  # FastAPI app and REST routes
+│   │   ├── app.py            # Main API entry point (serves static files & API)
+│   │   └── routes/           # /api/upload and /api/chat logic
+│   ├── core/                 # App settings & LLM configuration (Pydantic setup)
+│   ├── router/               # Agent orchestration (AgentRouter)
+│   ├── services/             # OCR, text cleaning, text parsing logic
+│   └── agents.py             # IntentAgent, DeadlineAgent, ActionAgent logic
 ├── data/
 │   └── uploads/              # Temporary storage for uploaded user files
-├── frontend/
-│   └── app.py                # Streamlit UI for user interaction
-├── .gitignore                # Ignored files (data/uploads, __pycache__, etc.)
+├── static/                   # Decoupled Single Page Application (SPA)
+│   ├── index.html            # Main UI shell
+│   ├── css/style.css         # UI Design System (cards, animations, colors)
+│   └── js/app.js             # Client-side routing, DOM manipulation, API calls
+├── .env.example              # Environment variables template
 ├── requirements.txt          # Python dependencies
 └── README.md                 # Project setup and documentation
 ```
 
-## System Requirements & Prerequisites (Windows)
+## System Prerequisites (Windows)
 
 Before running the Python application, you **must** install the system-level dependencies for OCR.
 
 1. **Install Tesseract OCR**:
    - Download the Windows installer from [UB-Mannheim Tesseract](https://github.com/UB-Mannheim/tesseract/wiki).
    - Install it, usually to `C:\Program Files\Tesseract-OCR\`.
-   - The path is configured in `backend/core/config.py`. Update the `TESSERACT_CMD` constant if you installed it elsewhere.
+   - The path is configured in `backend/core/config.py`. Update `TESSERACT_CMD` if installed elsewhere.
 
 2. **Install Poppler** (Required for PDF processing):
    - Download the latest Poppler Windows binary from [Release poppler-windows](https://github.com/oschwartz10612/poppler-windows/releases/).
    - Extract the `.zip` file to a folder like `C:\poppler\poppler-23.11.0\`.
-   - Update `POPPLER_PATH` in `backend/core/config.py` to point to the `Library\bin` folder inside the extracted Poppler directory.
+   - Update `POPPLER_PATH` in `backend/core/config.py` to point to the `Library\bin` folder.
+
+3. **Optional: Install Ollama** (If running locally):
+   - Download from [Ollama](https://ollama.com).
+   - Run `ollama run gemma3:4b` to pull and test the model.
 
 ## Setup Instructions
 
@@ -58,21 +71,39 @@ Before running the Python application, you **must** install the system-level dep
    pip install -r requirements.txt
    ```
 
-3. **Verify Configuration Paths**
-   Open `backend/core/config.py` and ensure the paths matches your system installation:
+3. **Configure Environment variables**
+   Create a `.env` file in the root directory.
+   
+   If using Google Gemini (Cloud):
+   ```env
+   LLM_BACKEND=gemini
+   GEMINI_API_KEY=your_gemini_api_key_here
+   ```
+
+   If using Ollama (Local/Private):
+   ```env
+   LLM_BACKEND=ollama
+   OLLAMA_MODEL=gemma3:4b
+   OLLAMA_BASE_URL=http://localhost:11434
+   ```
+
+4. **Verify Configuration Paths**
+   Open `backend/core/config.py` and ensure the OCR paths match your system installation:
    ```python
    TESSERACT_CMD: str = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
    POPPLER_PATH: str = r"C:\poppler\poppler-xx.xx.x\Library\bin"
    ```
 
-4. **Run the Streamlit Application**
-   Start the frontend server from the project root:
+5. **Run the Application**
+   Start the FastAPI server (which also serves the frontend):
    ```bash
-   python -m streamlit run frontend/app.py
+   uvicorn backend.api.app:app --host 0.0.0.0 --port 8000 --reload
    ```
    
-   The application will be accessible at `http://localhost:8501`.
+   The application will be accessible at `http://localhost:8000`.
 
-## Modularity for NoticeSense Future Phases
-This code is structured cleanly into `backend/services/` and `frontend/`. 
-As Phase 2 starts, we can easily add new AI Agents (e.g., `llm_service.py`, `agent_workflow.py`) inside `services/` and expose them through FastAPI endpoints for deeper system integration without breaking the existing OCR pipeline.
+## Architectural Shift
+NoticeSense has migrated from a monolithic Streamlit application (Phase 1/2) to a robust decoupled structure (Phase 3). 
+- **FastAPI** handles complex asynchronous routing and document parsing securely in the background.
+- A **Vanilla HTML/JS SPA** provides a fast, professional, lightweight user interface.
+- Session state is maintained in-memory on the backend using unique `session_id` mapping linked temporarily with browser `sessionStorage`.
